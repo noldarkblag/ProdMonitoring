@@ -83,7 +83,6 @@ def get_all_names(df_login, df_prod, df_leave):
         for val in series.dropna():
             name_str = str(val).strip()
             if name_str:
-                # Kunin lamang ang unang salita (First Name)
                 first_name = name_str.split()[0].capitalize()
                 names.add(first_name)
 
@@ -143,7 +142,7 @@ def filter_by_date_range(df, start_date, end_date):
         
     return df
 
-# Helper function to filter by Name (Matches First Name or Full Name)
+# Helper function to filter by Name
 def filter_by_name(df, selected):
     if df.empty or selected == "ALL":
         return df
@@ -156,6 +155,51 @@ def filter_by_name(df, selected):
             
     return df[df[target_col].astype(str).str.contains(selected, case=False, na=False)].copy()
 
+# Helper function to render table with Frozen First Column
+def render_sticky_table(df):
+    html_table = df.to_html(index=False, classes='sticky-table')
+    st.markdown("""
+    <style>
+    .table-container {
+        overflow-x: auto;
+        max-width: 100%;
+        border: 1px solid #e6e6e6;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .sticky-table {
+        border-collapse: collapse;
+        width: 100%;
+        font-family: sans-serif;
+        font-size: 14px;
+    }
+    .sticky-table th, .sticky-table td {
+        padding: 8px 12px;
+        border: 1px solid #e6e6e6;
+        white-space: nowrap;
+        text-align: left;
+    }
+    .sticky-table th {
+        background-color: #f0f2f6;
+        color: #31333F;
+    }
+    /* Frozen First Column (Name) */
+    .sticky-table td:first-child, .sticky-table th:first-child {
+        position: sticky;
+        left: 0;
+        background-color: #ffffff;
+        z-index: 1;
+        border-right: 2px solid #d3d3d3;
+        font-weight: 600;
+    }
+    .sticky-table th:first-child {
+        background-color: #f0f2f6;
+        z-index: 2;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown(f'<div class="table-container">{html_table}</div>', unsafe_allow_html=True)
+
 # --- DISPLAY RESULTS ---
 if selected_name:
     st.subheader(f"Results for: '{selected_name}'")
@@ -165,7 +209,7 @@ if selected_name:
         start_date, end_date = date_range[0], date_range[1]
         st.caption(f"Filtered Date Range: **{start_date}** to **{end_date}**")
 
-    # 1. LOGIN / TIME IN & TIME OUT SEARCH
+    # 1. LOGIN / TIME IN & TIME OUT SEARCH (WITH FROZEN FIRST COLUMN)
     st.write("### 🔑 Login / Attendance Status (`Login`)")
     if not df_login.empty:
         login_results = filter_by_name(df_login, selected_name)
@@ -174,7 +218,7 @@ if selected_name:
             login_results = filter_by_date_range(login_results, start_date, end_date)
             
         if not login_results.empty:
-            st.dataframe(login_results, use_container_width=True)
+            render_sticky_table(login_results)
         else:
             st.info("No login/attendance records found for the selected filter.")
     else:
@@ -182,7 +226,7 @@ if selected_name:
 
     st.markdown("---")
 
-    # 2. PRODUCTION DETAILS SEARCH
+    # 2. PRODUCTION DETAILS SEARCH (WITH FROZEN FIRST COLUMN)
     st.write("### 📊 Production Details (`prod tracker v2`)")
     if not df_prod.empty:
         prod_results = filter_by_name(df_prod, selected_name)
@@ -191,7 +235,7 @@ if selected_name:
             prod_results = filter_by_date_range(prod_results, start_date, end_date)
             
         if not prod_results.empty:
-            st.dataframe(prod_results, use_container_width=True)
+            render_sticky_table(prod_results)
         else:
             st.info("No records found in Production Tracker.")
 
@@ -204,51 +248,7 @@ if selected_name:
         leave_results = leave_results.loc[:, (leave_results != '').any(axis=0)]
 
         if not leave_results.empty:
-            # HTML Table conversion for frozen 'Name' column
-            html_table = leave_results.to_html(index=False, classes='sticky-table')
-            
-            st.markdown("""
-            <style>
-            .table-container {
-                overflow-x: auto;
-                max-width: 100%;
-                border: 1px solid #e6e6e6;
-                border-radius: 8px;
-                margin-bottom: 20px;
-            }
-            .sticky-table {
-                border-collapse: collapse;
-                width: 100%;
-                font-family: sans-serif;
-                font-size: 14px;
-            }
-            .sticky-table th, .sticky-table td {
-                padding: 8px 12px;
-                border: 1px solid #e6e6e6;
-                white-space: nowrap;
-                text-align: left;
-            }
-            .sticky-table th {
-                background-color: #f0f2f6;
-                color: #31333F;
-            }
-            /* Frozen First Column (Name) */
-            .sticky-table td:first-child, .sticky-table th:first-child {
-                position: sticky;
-                left: 0;
-                background-color: #ffffff;
-                z-index: 1;
-                border-right: 2px solid #d3d3d3;
-                font-weight: 600;
-            }
-            .sticky-table th:first-child {
-                background-color: #f0f2f6;
-                z-index: 2;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-
-            st.markdown(f'<div class="table-container">{html_table}</div>', unsafe_allow_html=True)
+            render_sticky_table(leave_results)
         else:
             st.info("No records found in Schedule Monitoring.")
     else:
