@@ -46,36 +46,36 @@ if raw_prod_data:
     padded_rows = [row + [''] * (len(headers) - len(row)) for row in rows]
     df_prod = pd.DataFrame(padded_rows, columns=headers)
 
-# Process Leave Forecast Data with Month Mapping
+# Process Leave Forecast Data with Specific Row Mapping
 df_leave = pd.DataFrame()
 if raw_leave_data:
-    months_list = ["January", "February", "March", "April", "May", "June", 
-                   "July", "August", "September", "October", "November", "December"]
+    month_row_mapping = {
+        20: "January",
+        35: "February",
+        56: "March",
+        75: "April",
+        94: "May",
+        113: "June"
+    }
     
     current_month = "Unknown Month"
     processed_rows = []
     max_cols = 0
     
-    # Iterate through all rows in Leave Forecast to attach the corresponding Month
-    for row in raw_leave_data:
+    for idx, row in enumerate(raw_leave_data, start=1):
         if not row:
             continue
-        
-        # Check if the row indicates a Month header
-        first_cell = str(row[0]).strip()
-        matching_month = next((m for m in months_list if m.lower() == first_cell.lower()), None)
-        
-        if matching_month:
-            current_month = matching_month
-            continue
             
-        # Add the identified month into the second column position
-        new_row = [row[0], current_month] + row[1:]
-        max_cols = max(max_cols, len(new_row))
-        processed_rows.append(new_row)
-        
+        if idx in month_row_mapping:
+            current_month = month_row_mapping[idx]
+            
+        first_cell = str(row[0]).strip() if len(row) > 0 else ""
+        if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
+            new_row = [first_cell, current_month] + row[1:]
+            max_cols = max(max_cols, len(new_row))
+            processed_rows.append(new_row)
+            
     if processed_rows:
-        # Build clean dynamic column names
         cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_cols - 1)]
         padded_leave_rows = [r + [''] * (max_cols - len(r)) for r in processed_rows]
         df_leave = pd.DataFrame(padded_leave_rows, columns=cols)
