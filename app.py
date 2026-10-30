@@ -76,7 +76,6 @@ if raw_leave_data:
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
         
-        # Ensure row belongs to a valid agent entry
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
             raw_values = [str(x).strip() for x in row[1:]]
             
@@ -118,8 +117,14 @@ def filter_by_date_range(df, start_date, end_date):
             break
             
     if date_col:
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-        mask = (df[date_col].dt.date >= start_date) & (df[date_col].dt.date <= end_date)
+        # Suportahan ang custom date string formats tulad ng 'Fri, Oct 30'
+        parsed_dates = pd.to_datetime(df[date_col], errors='coerce')
+        
+        # Kung nag-fail ang karaniwang parsing (dahil walang taon), subukang dagdagan ng current year (2026)
+        if parsed_dates.isna().all():
+            parsed_dates = pd.to_datetime(df[date_col].astype(str) + " 2026", errors='coerce')
+            
+        mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
         return df[mask]
     return df
 
@@ -149,7 +154,7 @@ if search_name:
         if not login_results.empty:
             st.dataframe(login_results, use_container_width=True)
         else:
-            st.info("No login/attendance records found.")
+            st.info("No login/attendance records found for the selected criteria.")
     else:
         st.info("Unable to read 'Login' sheet or sheet is empty.")
 
