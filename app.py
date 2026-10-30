@@ -117,12 +117,14 @@ def filter_by_date_range(df, start_date, end_date):
             break
             
     if date_col:
-        # Suportahan ang custom date string formats tulad ng 'Fri, Oct 30'
+        # Step 1: Subukang iparse bilang standard date
         parsed_dates = pd.to_datetime(df[date_col], errors='coerce')
         
-        # Kung nag-fail ang karaniwang parsing (dahil walang taon), subukang dagdagan ng current year (2026)
-        if parsed_dates.isna().all():
-            parsed_dates = pd.to_datetime(df[date_col].astype(str) + " 2026", errors='coerce')
+        # Step 2: Kung may NaT (dahil sa format na "Fri, Oct 30"), linisin at dagdagan ng year 2026
+        if parsed_dates.isna().any():
+            cleaned_dates = df[date_col].astype(str).str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
+            fallback_dates = pd.to_datetime(cleaned_dates + " 2026", format='%b %d %Y', errors='coerce')
+            parsed_dates = parsed_dates.fillna(fallback_dates)
             
         mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
         return df[mask]
