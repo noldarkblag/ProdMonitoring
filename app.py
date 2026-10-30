@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
 
 # Streamlit Page Setup
 st.set_page_config(page_title="Prod & Leave Search", layout="wide")
@@ -118,18 +117,23 @@ def filter_by_date_range(df, start_date, end_date):
             break
             
     if date_col:
-        raw_dates = df[date_col].astype(str)
-        parsed_dates = pd.to_datetime(raw_dates, errors='coerce')
+        raw_series = df[date_col].astype(str).str.strip()
         
-        if parsed_dates.isna().any():
-            clean_str = raw_dates.str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
-            fallback = pd.to_datetime(clean_str + " 2026", format='%b %d %Y', errors='coerce')
-            parsed_dates = parsed_dates.fillna(fallback)
-            
+        # Step 1: Linisin ang Day prefix tulad ng "Sun, ", "Fri, "
+        cleaned_series = raw_series.str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
+        
+        # Step 2: Dagdagan ng taon (2026) kung buwan at araw lang ang nakalagay
+        series_with_year = cleaned_series.apply(
+            lambda x: x + " 2026" if not any(y in x for y in ["2024", "2025", "2026"]) else x
+        )
+        
+        # Step 3: I-parse sa datetime objects
+        parsed_dates = pd.to_datetime(series_with_year, errors='coerce')
+        
+        # Step 4: I-filter nang strictly batay sa start_date at end_date
         mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
+        return df[mask]
         
-        if mask.any():
-            return df[mask]
     return df
 
 # --- DISPLAY RESULTS ---
@@ -141,7 +145,7 @@ if search_name:
         start_date, end_date = date_range[0], date_range[1]
         st.caption(f"Filtered Date Range: **{start_date}** to **{end_date}**")
 
-    # 1. LOGIN / TIME IN & TIME OUT SEARCH (Latest Today's Record Only)
+    # 1. LOGIN / TIME IN & TIME OUT SEARCH
     st.write("### 🔑 Login / Attendance Status (`Login`)")
     if not df_login.empty:
         target_col_login = df_login.columns[0]
@@ -154,15 +158,11 @@ if search_name:
         
         if start_date and end_date:
             login_results = filter_by_date_range(login_results, start_date, end_date)
-        else:
-            # KAPAG WALANG DATE FILTER: Kukunin lang ang LATEST (PINAKAHULING) row para sa ngayong araw
-            if not login_results.empty:
-                login_results = login_results.tail(1)
             
         if not login_results.empty:
             st.dataframe(login_results, use_container_width=True)
         else:
-            st.info("No login/attendance records found.")
+            st.info("No login/attendance records found for the selected date range.")
     else:
         st.info("Unable to read 'Login' sheet or sheet is empty.")
 
