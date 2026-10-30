@@ -31,7 +31,7 @@ def fetch_sheet_raw(sheet_name):
 # Fetch raw sheet values
 with st.spinner("Fetching data from Google Sheets..."):
     raw_prod_data = fetch_sheet_raw("prod tracker v2")
-    raw_leave_data = fetch_sheet_raw("Schedule Monitoring")  # <--- BINAGO DITO
+    raw_leave_data = fetch_sheet_raw("Schedule Monitoring")
     raw_login_data = fetch_sheet_raw("Login")
 
 # Helper function to convert raw list data into DataFrame
@@ -55,7 +55,6 @@ df_login = raw_to_dataframe(raw_login_data)
 # Process Schedule Monitoring Data
 df_leave = pd.DataFrame()
 if raw_leave_data:
-    # Hanapin ang header row kung nasaan ang "Name" o mga Petsa (Row 3 sa sheet)
     header_idx = None
     for idx, row in enumerate(raw_leave_data):
         if row and any("Name" in str(cell) for cell in row):
@@ -66,7 +65,6 @@ if raw_leave_data:
         headers = [str(cell).strip() for cell in raw_leave_data[header_idx]]
         data_rows = raw_leave_data[header_idx + 1:]
         
-        # Tatanggalin ang summary rows sa ibaba katulad ng "Total Duty" o "Total RD / Leave"
         valid_rows = []
         for row in data_rows:
             if row and len(row) > 0:
@@ -74,17 +72,12 @@ if raw_leave_data:
                 if name_cell and not any(term in name_cell.lower() for term in ["total", "duty", "leave"]):
                     valid_rows.append(row)
                     
-        # I-pad ang mga row para pare-pareho ang haba
         padded_rows = [r + [''] * (len(headers) - len(r)) for r in valid_rows]
         df_leave = pd.DataFrame(padded_rows, columns=headers)
 
-# --- SIDEBAR FILTERS ---
-st.sidebar.header("⚙️ Filter Options")
-
-# Date Range Picker
-st.sidebar.subheader("📅 Date Range Filter")
-date_range = st.sidebar.date_input(
-    "Select Date Range:",
+# --- MAIN FILTERS (INILIPAT SA IBAW NG SEARCH NAME) ---
+date_range = st.date_input(
+    "📅 Select Date Range:",
     value=[],
     help="Select Start Date and End Date"
 )
@@ -170,7 +163,6 @@ if search_name:
     # 3. SCHEDULE / LEAVE MONITORING SEARCH
     st.write("### 📅 Schedule Monitoring (`Schedule Monitoring`)")
     if not df_leave.empty:
-        # Hanapin ang Name column
         name_col = df_leave.columns[0]
         for col in df_leave.columns:
             if 'name' in str(col).lower() or 'agent' in str(col).lower():
@@ -178,8 +170,6 @@ if search_name:
                 break
 
         leave_results = df_leave[df_leave[name_col].astype(str).str.contains(search_name, case=False, na=False)].copy()
-        
-        # Lilinisin ang mga bakanteng kolum
         leave_results = leave_results.loc[:, (leave_results != '').any(axis=0)]
 
         if not leave_results.empty:
