@@ -32,19 +32,25 @@ def fetch_sheet_raw(sheet_name):
 with st.spinner("Fetching data from Google Sheets..."):
     raw_prod_data = fetch_sheet_raw("prod tracker v2")
     raw_leave_data = fetch_sheet_raw("2026 leave forecast")
+    raw_login_data = fetch_sheet_raw("Login")
 
-# Process Prod Data
-df_prod = pd.DataFrame()
-if raw_prod_data:
+# Helper function to convert raw list data into DataFrame
+def raw_to_dataframe(raw_data):
+    if not raw_data:
+        return pd.DataFrame()
     header_idx = 0
-    for idx, row in enumerate(raw_prod_data):
+    for idx, row in enumerate(raw_data):
         if any(row):
             header_idx = idx
             break
-    headers = raw_prod_data[header_idx]
-    rows = raw_prod_data[header_idx + 1:]
+    headers = raw_data[header_idx]
+    rows = raw_data[header_idx + 1:]
     padded_rows = [row + [''] * (len(headers) - len(row)) for row in rows]
-    df_prod = pd.DataFrame(padded_rows, columns=headers)
+    return pd.DataFrame(padded_rows, columns=headers)
+
+# Process Prod & Login Data
+df_prod = raw_to_dataframe(raw_prod_data)
+df_login = raw_to_dataframe(raw_login_data)
 
 # Process Leave Forecast Data
 df_leave = pd.DataFrame()
@@ -56,7 +62,6 @@ if raw_leave_data:
         75: "October",
         94: "November",
         113: "December",
-        
     }
     
     current_month = "Unknown Month"
@@ -71,12 +76,10 @@ if raw_leave_data:
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
         
-        # Siguraduhing totoong pangalan ng agent ito
+        # Ensure row belongs to a valid agent entry
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            # Linisin ang row: Tanggalin ang bakanteng cells sa gitna kung mayroon
             raw_values = [str(x).strip() for x in row[1:]]
             
-            # Kung ang unang cell pagkatapos ng Name ay blank (None/empty string), alisin ito para pumasok agad ang Day 1
             if raw_values and raw_values[0] == "":
                 raw_values = raw_values[1:]
                 
@@ -84,16 +87,10 @@ if raw_leave_data:
             processed_rows.append(new_row)
             
     if processed_rows:
-        # Alamin ang pinakamahabang row para sa number ng days
         max_cols = max(len(r) for r in processed_rows)
-        
-        # BUMUO NG EKSAKTONG HEADERS: Name, Month, Day_1, Day_2, Day_3...
         cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_cols - 1)]
-        
         padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
         df_leave = pd.DataFrame(padded_leave_rows)
-        
-        # FORCED OVERWRITE: Pilitin ang column names na magsimula sa Day_1
         df_leave.columns = cols[:df_leave.shape[1]]
 
 # --- SIDEBAR FILTERS ---
@@ -116,7 +113,7 @@ def filter_by_date_range(df, start_date, end_date):
     
     date_col = None
     for col in df.columns:
-        if 'date' in str(col).lower():
+        if 'date' in str(col).lower() or 'timestamp' in str(col).lower() or 'petsa' in str(col).lower():
             date_col = col
             break
             
@@ -135,7 +132,30 @@ if search_name:
         start_date, end_date = date_range[0], date_range[1]
         st.caption(f"Filtered Date Range: **{start_date}** to **{end_date}**")
 
-    # 1. PRODUCTION DETAILS SEARCH
+    # 1. LOGIN / TIME IN & TIME OUT SEARCH
+    st.write("### 🔑 Login / Attendance Status (`Login`)")
+    if not df_login.empty:
+        target_col_login = df_login.columns[0]
+        for col in df_login.columns:
+            if 'name' in str(col).lower() or 'agent' in str(col).lower() or 'employee' in str(col).lower():
+                target_col_login = col
+                break
+        
+        login_results = df_login[df_login[target_col_login].astype(str).str.contains(search_name, case=False, na=False)].copy()
+        
+        if start_date and end_date:
+            login_results = filter_by_date_range(login_results, start_date, end_date)
+            
+        if not login_results.empty:
+            st.dataframe(login_results, use_container_width=True)
+        else:
+            st.info("No login/attendance records found.")
+    else:
+        st.info("Unable to read 'Login' sheet or sheet is empty.")
+
+    st.markdown("---")
+
+    # 2. PRODUCTION DETAILS SEARCH
     st.write("### 📊 Production Details (`prod tracker v2`)")
     if not df_prod.empty:
         target_col = df_prod.columns[0]
@@ -156,19 +176,17 @@ if search_name:
 
     st.markdown("---")
 
-    # 2. LEAVE FORECAST SEARCH
+    # 3. LEAVE FORECAST SEARCH
     st.write("### 📅 Leave Forecast (`2026 leave forecast`)")
     if not df_leave.empty:
         leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        # Days per month lookup table
         days_in_months = {
             "January": 31, "February": 28, "March": 31, "April": 30,
             "May": 31, "June": 30, "July": 31, "August": 31,
             "September": 30, "October": 31, "November": 30, "December": 31
         }
 
-        # Clear out days exceeding actual month length
         processed_leave_results = []
         for idx, row in leave_results.iterrows():
             month_name = str(row.get("Month", "")).strip()
@@ -183,7 +201,6 @@ if search_name:
         if processed_leave_results:
             leave_results = pd.DataFrame(processed_leave_results)
 
-        # Drop columns beyond Day 31 or completely empty day columns
         cols_to_keep = []
         for col in leave_results.columns:
             if str(col).startswith("Day_"):
