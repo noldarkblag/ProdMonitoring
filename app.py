@@ -75,16 +75,48 @@ if raw_leave_data:
         padded_rows = [r + [''] * (len(headers) - len(r)) for r in valid_rows]
         df_leave = pd.DataFrame(padded_rows, columns=headers)
 
-# --- MAIN FILTERS (INILIPAT SA IBAW NG SEARCH NAME) ---
+# --- EXTRACT ALL UNIQUE NAMES FOR DROPDOWN ---
+def get_all_names(df_login, df_prod, df_leave):
+    names = set()
+    
+    # Extract names from Login sheet
+    if not df_login.empty:
+        col = next((c for c in df_login.columns if any(k in str(c).lower() for k in ['name', 'agent', 'employee'])), df_login.columns[0])
+        names.update(df_login[col].dropna().astype(str).str.strip().unique())
+        
+    # Extract names from Prod sheet
+    if not df_prod.empty:
+        col = next((c for c in df_prod.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_prod.columns[0])
+        names.update(df_prod[col].dropna().astype(str).str.strip().unique())
+        
+    # Extract names from Schedule Monitoring sheet
+    if not df_leave.empty:
+        col = next((c for c in df_leave.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_leave.columns[0])
+        names.update(df_leave[col].dropna().astype(str).str.strip().unique())
+
+    # Remove blank entries and sort alphabetically
+    clean_names = sorted([name for name in names if name and name.strip() != ""])
+    return ["ALL"] + clean_names
+
+# Get options for dropdown
+name_options = get_all_names(df_login, df_prod, df_leave)
+
+# --- MAIN FILTERS ---
 date_range = st.date_input(
     "📅 Select Date Range:",
     value=[],
     help="Select Start Date and End Date"
 )
 
-# Search Input
-search_name = st.text_input("🔍 Search Name (e.g., Arnold):", "")
+# Search Dropdown Selection
+selected_name = st.selectbox(
+    "🔍 Select Name:",
+    options=name_options,
+    index=0,
+    help="Select a name from the list or choose 'ALL' to view all records."
+)
 
+# Helper function to filter by Date Range
 def filter_by_date_range(df, start_date, end_date):
     if df.empty:
         return df
@@ -107,9 +139,22 @@ def filter_by_date_range(df, start_date, end_date):
         
     return df
 
+# Helper function to filter by Name
+def filter_by_name(df, selected):
+    if df.empty or selected == "ALL":
+        return df
+    
+    target_col = df.columns[0]
+    for col in df.columns:
+        if any(k in str(col).lower() for k in ['name', 'agent', 'employee']):
+            target_col = col
+            break
+            
+    return df[df[target_col].astype(str).str.contains(selected, case=False, na=False)].copy()
+
 # --- DISPLAY RESULTS ---
-if search_name:
-    st.subheader(f"Results for: '{search_name}'")
+if selected_name:
+    st.subheader(f"Results for: '{selected_name}'")
     
     start_date, end_date = None, None
     if len(date_range) == 2:
@@ -119,13 +164,7 @@ if search_name:
     # 1. LOGIN / TIME IN & TIME OUT SEARCH
     st.write("### 🔑 Login / Attendance Status (`Login`)")
     if not df_login.empty:
-        target_col_login = df_login.columns[0]
-        for col in df_login.columns:
-            if 'name' in str(col).lower() or 'agent' in str(col).lower() or 'employee' in str(col).lower():
-                target_col_login = col
-                break
-        
-        login_results = df_login[df_login[target_col_login].astype(str).str.contains(search_name, case=False, na=False)].copy()
+        login_results = filter_by_name(df_login, selected_name)
         
         if start_date and end_date:
             login_results = filter_by_date_range(login_results, start_date, end_date)
@@ -133,7 +172,7 @@ if search_name:
         if not login_results.empty:
             st.dataframe(login_results, use_container_width=True)
         else:
-            st.info("No login/attendance records found for the selected date range.")
+            st.info("No login/attendance records found for the selected filter.")
     else:
         st.info("Unable to read 'Login' sheet or sheet is empty.")
 
@@ -142,13 +181,7 @@ if search_name:
     # 2. PRODUCTION DETAILS SEARCH
     st.write("### 📊 Production Details (`prod tracker v2`)")
     if not df_prod.empty:
-        target_col = df_prod.columns[0]
-        for col in df_prod.columns:
-            if 'name' in str(col).lower() or 'agent' in str(col).lower():
-                target_col = col
-                break
-        
-        prod_results = df_prod[df_prod[target_col].astype(str).str.contains(search_name, case=False, na=False)].copy()
+        prod_results = filter_by_name(df_prod, selected_name)
         
         if start_date and end_date:
             prod_results = filter_by_date_range(prod_results, start_date, end_date)
@@ -163,13 +196,7 @@ if search_name:
     # 3. SCHEDULE / LEAVE MONITORING SEARCH
     st.write("### 📅 Schedule Monitoring (`Schedule Monitoring`)")
     if not df_leave.empty:
-        name_col = df_leave.columns[0]
-        for col in df_leave.columns:
-            if 'name' in str(col).lower() or 'agent' in str(col).lower():
-                name_col = col
-                break
-
-        leave_results = df_leave[df_leave[name_col].astype(str).str.contains(search_name, case=False, na=False)].copy()
+        leave_results = filter_by_name(df_leave, selected_name)
         leave_results = leave_results.loc[:, (leave_results != '').any(axis=0)]
 
         if not leave_results.empty:
