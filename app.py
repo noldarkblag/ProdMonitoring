@@ -66,7 +66,6 @@ if raw_leave_data:
     
     current_month = "Unknown Month"
     processed_rows = []
-    max_days_found = 0
     
     for idx, row in enumerate(raw_leave_data, start=1):
         if not row:
@@ -77,21 +76,30 @@ if raw_leave_data:
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
         
-        # Ensure row is a valid agent entry
+        # Siguraduhing totoong pangalan ng agent ito
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            # row[0] is Name, row[1:] starts directly at Day 1 value
-            day_values = row[1:]
-            max_days_found = max(max_days_found, len(day_values))
+            # Linisin ang row: Tanggalin ang bakanteng cells sa gitna kung mayroon
+            raw_values = [str(x).strip() for x in row[1:]]
             
-            # Construct row: Col A = Name, Col B = Month, Col C = Day 1, Col D = Day 2, etc.
-            new_row = [first_cell, current_month] + day_values
+            # Kung ang unang cell pagkatapos ng Name ay blank (None/empty string), alisin ito para pumasok agad ang Day 1
+            if raw_values and raw_values[0] == "":
+                raw_values = raw_values[1:]
+                
+            new_row = [first_cell, current_month] + raw_values
             processed_rows.append(new_row)
             
     if processed_rows:
-        # Build headers starting precisely at Day_1 for Column C through the end
-        cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_days_found + 1)]
+        # Alamin ang pinakamahabang row para sa number ng days
+        max_cols = max(len(r) for r in processed_rows)
+        
+        # BUMUO NG EKSAKTONG HEADERS: Name, Month, Day_1, Day_2, Day_3...
+        cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_cols - 1)]
+        
         padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
-        df_leave = pd.DataFrame(padded_leave_rows, columns=cols)
+        df_leave = pd.DataFrame(padded_leave_rows)
+        
+        # FORCED OVERWRITE: Pilitin ang column names na magsimula sa Day_1
+        df_leave.columns = cols[:df_leave.shape[1]]
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("⚙️ Filter Options")
@@ -158,7 +166,7 @@ if search_name:
     if not df_leave.empty:
         leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        # Specific days per month lookup table
+        # Days per month lookup table
         days_in_months = {
             "January": 31, "February": 28, "March": 31, "April": 30,
             "May": 31, "June": 30, "July": 31, "August": 31,
