@@ -50,18 +50,13 @@ if raw_prod_data:
 df_leave = pd.DataFrame()
 if raw_leave_data:
     month_row_mapping = {
-        20: "January",
-        35: "February",
-        56: "March",
-        75: "April",
-        94: "May",
-        113: "June",
-        132: "July",
-        151: "August",
-        170: "September",
-        189: "October",
-        208: "November",
-        227: "December"
+        20: "July",
+        35: "August",
+        56: "September",
+        75: "October",
+        94: "November",
+        113: "December",
+        
     }
     
     current_month = "Unknown Month"
