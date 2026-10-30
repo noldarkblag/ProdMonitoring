@@ -75,23 +75,31 @@ if raw_leave_data:
         padded_rows = [r + [''] * (len(headers) - len(r)) for r in valid_rows]
         df_leave = pd.DataFrame(padded_rows, columns=headers)
 
-# --- EXTRACT ALL UNIQUE NAMES FOR DROPDOWN ---
+# --- EXTRACT FIRST NAMES ONLY FOR DROPDOWN ---
 def get_all_names(df_login, df_prod, df_leave):
     names = set()
     
+    def extract_first_name(series):
+        for val in series.dropna():
+            name_str = str(val).strip()
+            if name_str:
+                # Kunin lamang ang unang salita (First Name)
+                first_name = name_str.split()[0].capitalize()
+                names.add(first_name)
+
     if not df_login.empty:
         col = next((c for c in df_login.columns if any(k in str(c).lower() for k in ['name', 'agent', 'employee'])), df_login.columns[0])
-        names.update(df_login[col].dropna().astype(str).str.strip().unique())
+        extract_first_name(df_login[col])
         
     if not df_prod.empty:
         col = next((c for c in df_prod.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_prod.columns[0])
-        names.update(df_prod[col].dropna().astype(str).str.strip().unique())
+        extract_first_name(df_prod[col])
         
     if not df_leave.empty:
         col = next((c for c in df_leave.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_leave.columns[0])
-        names.update(df_leave[col].dropna().astype(str).str.strip().unique())
+        extract_first_name(df_leave[col])
 
-    clean_names = sorted([name for name in names if name and name.strip() != ""])
+    clean_names = sorted([name for name in names if name])
     return ["ALL"] + clean_names
 
 # Get options for dropdown
@@ -109,7 +117,7 @@ selected_name = st.selectbox(
     "🔍 Select Name:",
     options=name_options,
     index=0,
-    help="Select a name from the list or choose 'ALL' to view all records."
+    help="Select a first name from the list or choose 'ALL' to view all records."
 )
 
 # Helper function to filter by Date Range
@@ -135,7 +143,7 @@ def filter_by_date_range(df, start_date, end_date):
         
     return df
 
-# Helper function to filter by Name
+# Helper function to filter by Name (Matches First Name or Full Name)
 def filter_by_name(df, selected):
     if df.empty or selected == "ALL":
         return df
