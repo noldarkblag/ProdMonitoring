@@ -77,18 +77,18 @@ if raw_leave_data:
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
         
-        # Ensure row is a valid agent entry and not a header/month row
+        # Ensure row is a valid agent entry
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            # Column C onwards (row[1:]) contains Day 1, Day 2, etc.
+            # row[0] is Name, row[1:] starts directly at Day 1 value
             day_values = row[1:]
             max_days_found = max(max_days_found, len(day_values))
             
-            # Construct row: Column A = Name, Column B = Month, Column C+ = Day Values
+            # Construct row: Col A = Name, Col B = Month, Col C = Day 1, Col D = Day 2, etc.
             new_row = [first_cell, current_month] + day_values
             processed_rows.append(new_row)
             
     if processed_rows:
-        # Build headers starting precisely at Day_1 for Column C
+        # Build headers starting precisely at Day_1 for Column C through the end
         cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_days_found + 1)]
         padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
         df_leave = pd.DataFrame(padded_leave_rows, columns=cols)
