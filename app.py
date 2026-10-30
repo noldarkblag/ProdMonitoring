@@ -4,7 +4,7 @@ import requests
 
 # Streamlit Page Setup
 st.set_page_config(page_title="Prod & Leave Search", layout="wide")
-st.title("🔍 Production & Leave Forecast Search Tool")
+st.title("🔍 Production & Schedule Search Tool")
 
 # Google Spreadsheet ID
 SHEET_ID = "1n99mFwmsRmcw731vuXp3_mUKOx3O4xXkgZqwSjXu7CY"
