@@ -31,7 +31,7 @@ def fetch_sheet_raw(sheet_name):
 # Fetch raw sheet values
 with st.spinner("Fetching data from Google Sheets..."):
     raw_prod_data = fetch_sheet_raw("prod tracker v2")
-    raw_leave_data = fetch_sheet_raw("2026 leave forecast")
+    raw_leave_data = fetch_sheet_raw("Schedule Monitoring")  # <--- BINAGO DITO
     raw_login_data = fetch_sheet_raw("Login")
 
 # Helper function to convert raw list data into DataFrame
@@ -52,45 +52,31 @@ def raw_to_dataframe(raw_data):
 df_prod = raw_to_dataframe(raw_prod_data)
 df_login = raw_to_dataframe(raw_login_data)
 
-# Process Leave Forecast Data
+# Process Schedule Monitoring Data
 df_leave = pd.DataFrame()
 if raw_leave_data:
-    month_row_mapping = {
-        20: "July",
-        35: "August",
-        56: "September",
-        75: "October",
-        94: "November",
-        113: "December",
-    }
-    
-    current_month = "Unknown Month"
-    processed_rows = []
-    
-    for idx, row in enumerate(raw_leave_data, start=1):
-        if not row:
-            continue
+    # Hanapin ang header row kung nasaan ang "Name" o mga Petsa (Row 3 sa sheet)
+    header_idx = None
+    for idx, row in enumerate(raw_leave_data):
+        if row and any("Name" in str(cell) for cell in row):
+            header_idx = idx
+            break
             
-        if idx in month_row_mapping:
-            current_month = month_row_mapping[idx]
-            
-        first_cell = str(row[0]).strip() if len(row) > 0 else ""
+    if header_idx is not None:
+        headers = [str(cell).strip() for cell in raw_leave_data[header_idx]]
+        data_rows = raw_leave_data[header_idx + 1:]
         
-        if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            raw_values = [str(x).strip() for x in row[1:]]
-            
-            if raw_values and raw_values[0] == "":
-                raw_values = raw_values[1:]
-                
-            new_row = [first_cell, current_month] + raw_values
-            processed_rows.append(new_row)
-            
-    if processed_rows:
-        max_cols = max(len(r) for r in processed_rows)
-        cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_cols - 1)]
-        padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
-        df_leave = pd.DataFrame(padded_leave_rows)
-        df_leave.columns = cols[:df_leave.shape[1]]
+        # Tatanggalin ang summary rows sa ibaba katulad ng "Total Duty" o "Total RD / Leave"
+        valid_rows = []
+        for row in data_rows:
+            if row and len(row) > 0:
+                name_cell = str(row[0]).strip()
+                if name_cell and not any(term in name_cell.lower() for term in ["total", "duty", "leave"]):
+                    valid_rows.append(row)
+                    
+        # I-pad ang mga row para pare-pareho ang haba
+        padded_rows = [r + [''] * (len(headers) - len(r)) for r in valid_rows]
+        df_leave = pd.DataFrame(padded_rows, columns=headers)
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("⚙️ Filter Options")
@@ -118,19 +104,11 @@ def filter_by_date_range(df, start_date, end_date):
             
     if date_col:
         raw_series = df[date_col].astype(str).str.strip()
-        
-        # Step 1: Linisin ang Day prefix tulad ng "Sun, ", "Fri, "
         cleaned_series = raw_series.str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
-        
-        # Step 2: Dagdagan ng taon (2026) kung buwan at araw lang ang nakalagay
         series_with_year = cleaned_series.apply(
             lambda x: x + " 2026" if not any(y in x for y in ["2024", "2025", "2026"]) else x
         )
-        
-        # Step 3: I-parse sa datetime objects
         parsed_dates = pd.to_datetime(series_with_year, errors='coerce')
-        
-        # Step 4: I-filter nang strictly batay sa start_date at end_date
         mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
         return df[mask]
         
@@ -189,47 +167,24 @@ if search_name:
 
     st.markdown("---")
 
-    # 3. LEAVE FORECAST SEARCH
-    st.write("### 📅 Leave Forecast (`2026 leave forecast`)")
+    # 3. SCHEDULE / LEAVE MONITORING SEARCH
+    st.write("### 📅 Schedule Monitoring (`Schedule Monitoring`)")
     if not df_leave.empty:
-        leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
+        # Hanapin ang Name column
+        name_col = df_leave.columns[0]
+        for col in df_leave.columns:
+            if 'name' in str(col).lower() or 'agent' in str(col).lower():
+                name_col = col
+                break
+
+        leave_results = df_leave[df_leave[name_col].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        days_in_months = {
-            "January": 31, "February": 28, "March": 31, "April": 30,
-            "May": 31, "June": 30, "July": 31, "August": 31,
-            "September": 30, "October": 31, "November": 30, "December": 31
-        }
-
-        processed_leave_results = []
-        for idx, row in leave_results.iterrows():
-            month_name = str(row.get("Month", "")).strip()
-            max_days = days_in_months.get(month_name, 31)
-            
-            for d in range(max_days + 1, 32):
-                day_col = f"Day_{d}"
-                if day_col in row:
-                    row[day_col] = ""
-            processed_leave_results.append(row)
-
-        if processed_leave_results:
-            leave_results = pd.DataFrame(processed_leave_results)
-
-        cols_to_keep = []
-        for col in leave_results.columns:
-            if str(col).startswith("Day_"):
-                try:
-                    day_num = int(str(col).split("_")[1])
-                    if day_num <= 31:
-                        if not leave_results[col].astype(str).str.strip().eq("").all():
-                            cols_to_keep.append(col)
-                except ValueError:
-                    pass
-            else:
-                cols_to_keep.append(col)
-                
-        leave_results = leave_results[cols_to_keep]
+        # Lilinisin ang mga bakanteng kolum
+        leave_results = leave_results.loc[:, (leave_results != '').any(axis=0)]
 
         if not leave_results.empty:
             st.dataframe(leave_results, use_container_width=True)
         else:
-            st.info("No records found in Leave Forecast.")
+            st.info("No records found in Schedule Monitoring.")
+    else:
+        st.info("Unable to read 'Schedule Monitoring' sheet or sheet is empty.")
