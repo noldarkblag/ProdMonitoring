@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+from datetime import datetime
 
 # Streamlit Page Setup
 st.set_page_config(page_title="Prod & Leave Search", layout="wide")
@@ -117,13 +118,9 @@ def filter_by_date_range(df, start_date, end_date):
             break
             
     if date_col:
-        # Pilitin ang pag-convert gamit ang flexible string cleaning (halimbawa: "Fri, Oct 30" -> Oct 30)
         raw_dates = df[date_col].astype(str)
-        
-        # Subukang mag-parse gamit ang pandas
         parsed_dates = pd.to_datetime(raw_dates, errors='coerce')
         
-        # Kung nag-fail dahil walang taon sa text na tulad ng "Fri, Oct 30", linisin ang day name at lagyan ng year 2026
         if parsed_dates.isna().any():
             clean_str = raw_dates.str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
             fallback = pd.to_datetime(clean_str + " 2026", format='%b %d %Y', errors='coerce')
@@ -131,11 +128,8 @@ def filter_by_date_range(df, start_date, end_date):
             
         mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
         
-        # Kung walang nag-match sa date object filter, huwag i-drop ang buong resulta kung magkatugma sa exact text
-        if not mask.any():
-            return df
-            
-        return df[mask]
+        if mask.any():
+            return df[mask]
     return df
 
 # --- DISPLAY RESULTS ---
@@ -147,7 +141,7 @@ if search_name:
         start_date, end_date = date_range[0], date_range[1]
         st.caption(f"Filtered Date Range: **{start_date}** to **{end_date}**")
 
-    # 1. LOGIN / TIME IN & TIME OUT SEARCH
+    # 1. LOGIN / TIME IN & TIME OUT SEARCH (Latest Today's Record Only)
     st.write("### 🔑 Login / Attendance Status (`Login`)")
     if not df_login.empty:
         target_col_login = df_login.columns[0]
@@ -160,6 +154,10 @@ if search_name:
         
         if start_date and end_date:
             login_results = filter_by_date_range(login_results, start_date, end_date)
+        else:
+            # KAPAG WALANG DATE FILTER: Kukunin lang ang LATEST (PINAKAHULING) row para sa ngayong araw
+            if not login_results.empty:
+                login_results = login_results.tail(1)
             
         if not login_results.empty:
             st.dataframe(login_results, use_container_width=True)
