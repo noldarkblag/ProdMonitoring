@@ -79,22 +79,18 @@ if raw_leave_data:
 def get_all_names(df_login, df_prod, df_leave):
     names = set()
     
-    # Extract names from Login sheet
     if not df_login.empty:
         col = next((c for c in df_login.columns if any(k in str(c).lower() for k in ['name', 'agent', 'employee'])), df_login.columns[0])
         names.update(df_login[col].dropna().astype(str).str.strip().unique())
         
-    # Extract names from Prod sheet
     if not df_prod.empty:
         col = next((c for c in df_prod.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_prod.columns[0])
         names.update(df_prod[col].dropna().astype(str).str.strip().unique())
         
-    # Extract names from Schedule Monitoring sheet
     if not df_leave.empty:
         col = next((c for c in df_leave.columns if any(k in str(c).lower() for k in ['name', 'agent'])), df_leave.columns[0])
         names.update(df_leave[col].dropna().astype(str).str.strip().unique())
 
-    # Remove blank entries and sort alphabetically
     clean_names = sorted([name for name in names if name and name.strip() != ""])
     return ["ALL"] + clean_names
 
@@ -193,14 +189,58 @@ if selected_name:
 
     st.markdown("---")
 
-    # 3. SCHEDULE / LEAVE MONITORING SEARCH
+    # 3. SCHEDULE / LEAVE MONITORING SEARCH (WITH FROZEN FIRST COLUMN)
     st.write("### 📅 Schedule Monitoring (`Schedule Monitoring`)")
     if not df_leave.empty:
         leave_results = filter_by_name(df_leave, selected_name)
         leave_results = leave_results.loc[:, (leave_results != '').any(axis=0)]
 
         if not leave_results.empty:
-            st.dataframe(leave_results, use_container_width=True)
+            # HTML Table conversion for frozen 'Name' column
+            html_table = leave_results.to_html(index=False, classes='sticky-table')
+            
+            st.markdown("""
+            <style>
+            .table-container {
+                overflow-x: auto;
+                max-width: 100%;
+                border: 1px solid #e6e6e6;
+                border-radius: 8px;
+                margin-bottom: 20px;
+            }
+            .sticky-table {
+                border-collapse: collapse;
+                width: 100%;
+                font-family: sans-serif;
+                font-size: 14px;
+            }
+            .sticky-table th, .sticky-table td {
+                padding: 8px 12px;
+                border: 1px solid #e6e6e6;
+                white-space: nowrap;
+                text-align: left;
+            }
+            .sticky-table th {
+                background-color: #f0f2f6;
+                color: #31333F;
+            }
+            /* Frozen First Column (Name) */
+            .sticky-table td:first-child, .sticky-table th:first-child {
+                position: sticky;
+                left: 0;
+                background-color: #ffffff;
+                z-index: 1;
+                border-right: 2px solid #d3d3d3;
+                font-weight: 600;
+            }
+            .sticky-table th:first-child {
+                background-color: #f0f2f6;
+                z-index: 2;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown(f'<div class="table-container">{html_table}</div>', unsafe_allow_html=True)
         else:
             st.info("No records found in Schedule Monitoring.")
     else:
