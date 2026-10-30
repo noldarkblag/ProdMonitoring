@@ -145,24 +145,46 @@ if search_name:
     if not df_leave.empty:
         leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        # Remove completely empty columns
-        leave_results = leave_results.dropna(how='all', axis=1)
-        
-        # Filter out Day columns beyond Day_31 (Day_32, Day_33, etc.)
-        valid_cols = []
+        # Dictionary para sa eksaktong bilang ng araw kada buwan sa 2026
+        days_in_months = {
+            "January": 31, "February": 28, "March": 31, "April": 30,
+            "May": 31, "June": 30, "July": 31, "August": 31,
+            "September": 30, "October": 31, "November": 30, "December": 31
+        }
+
+        # Subukang i-filter ang Day columns batay sa 'Month' ng bawat row
+        processed_leave_results = []
+        for idx, row in leave_results.iterrows():
+            month_name = str(row.get("Month", "")).strip()
+            max_days = days_in_months.get(month_name, 31)
+            
+            # Gawing blank ang anumang Day column na lampas sa tunay na bilang ng araw ng buwan
+            for d in range(max_days + 1, 32):
+                day_col = f"Day_{d}"
+                if day_col in row:
+                    row[day_col] = ""
+            processed_leave_results.append(row)
+
+        if processed_leave_results:
+            leave_results = pd.DataFrame(processed_leave_results)
+
+        # Tanggalin ang Day columns kung puro blank ang laman sa buong nakitang results
+        cols_to_keep = []
         for col in leave_results.columns:
             if str(col).startswith("Day_"):
                 try:
                     day_num = int(str(col).split("_")[1])
                     if day_num <= 31:
-                        valid_cols.append(col)
+                        # Panatilihin lang ang column kung hindi puro blank ang laman nito
+                        if not leave_results[col].astype(str).str.strip().eq("").all():
+                            cols_to_keep.append(col)
                 except ValueError:
                     pass
             else:
-                valid_cols.append(col)
+                cols_to_keep.append(col)
                 
-        leave_results = leave_results[valid_cols]
-        
+        leave_results = leave_results[cols_to_keep]
+
         if not leave_results.empty:
             st.dataframe(leave_results, use_container_width=True)
         else:
