@@ -148,6 +148,21 @@ if search_name:
         # Remove completely empty columns
         leave_results = leave_results.dropna(how='all', axis=1)
         
+        # Filter out Day columns beyond Day_31 (Day_32, Day_33, etc.)
+        valid_cols = []
+        for col in leave_results.columns:
+            if str(col).startswith("Day_"):
+                try:
+                    day_num = int(str(col).split("_")[1])
+                    if day_num <= 31:
+                        valid_cols.append(col)
+                except ValueError:
+                    pass
+            else:
+                valid_cols.append(col)
+                
+        leave_results = leave_results[valid_cols]
+        
         if not leave_results.empty:
             st.dataframe(leave_results, use_container_width=True)
         else:
