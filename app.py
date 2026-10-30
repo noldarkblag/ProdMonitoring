@@ -46,21 +46,27 @@ if raw_prod_data:
     padded_rows = [row + [''] * (len(headers) - len(row)) for row in rows]
     df_prod = pd.DataFrame(padded_rows, columns=headers)
 
-# Process Leave Forecast Data with Specific Row Mapping
+# Process Leave Forecast Data with Fixed Column Indexing
 df_leave = pd.DataFrame()
 if raw_leave_data:
     month_row_mapping = {
-        20: "July",
-        35: "August",
-        56: "September",
-        75: "October",
-        94: "November",
-        113: "December"
+        20: "January",
+        35: "February",
+        56: "March",
+        75: "April",
+        94: "May",
+        113: "June",
+        132: "July",
+        151: "August",
+        170: "September",
+        189: "October",
+        208: "November",
+        227: "December"
     }
     
     current_month = "Unknown Month"
     processed_rows = []
-    max_cols = 0
+    max_days_found = 0
     
     for idx, row in enumerate(raw_leave_data, start=1):
         if not row:
@@ -71,13 +77,17 @@ if raw_leave_data:
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            new_row = [first_cell, current_month] + row[1:]
-            max_cols = max(max_cols, len(new_row))
+            # row[0] is Name, row[1:] are Day values (Day 1, Day 2, etc.)
+            day_values = row[1:]
+            max_days_found = max(max_days_found, len(day_values))
+            
+            new_row = [first_cell, current_month] + day_values
             processed_rows.append(new_row)
             
     if processed_rows:
-        cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_cols - 1)]
-        padded_leave_rows = [r + [''] * (max_cols - len(r)) for r in processed_rows]
+        # Dynamically generate Day headers starting correctly from Day_1
+        cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_days_found + 1)]
+        padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
         df_leave = pd.DataFrame(padded_leave_rows, columns=cols)
 
 # --- SIDEBAR FILTERS ---
@@ -145,20 +155,19 @@ if search_name:
     if not df_leave.empty:
         leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        # Dictionary para sa eksaktong bilang ng araw kada buwan sa 2026
+        # Days per month lookup
         days_in_months = {
             "January": 31, "February": 28, "March": 31, "April": 30,
             "May": 31, "June": 30, "July": 31, "August": 31,
             "September": 30, "October": 31, "November": 30, "December": 31
         }
 
-        # Subukang i-filter ang Day columns batay sa 'Month' ng bawat row
+        # Clear values beyond actual month length
         processed_leave_results = []
         for idx, row in leave_results.iterrows():
             month_name = str(row.get("Month", "")).strip()
             max_days = days_in_months.get(month_name, 31)
             
-            # Gawing blank ang anumang Day column na lampas sa tunay na bilang ng araw ng buwan
             for d in range(max_days + 1, 32):
                 day_col = f"Day_{d}"
                 if day_col in row:
@@ -168,14 +177,13 @@ if search_name:
         if processed_leave_results:
             leave_results = pd.DataFrame(processed_leave_results)
 
-        # Tanggalin ang Day columns kung puro blank ang laman sa buong nakitang results
+        # Drop columns beyond Day 31 or completely empty columns
         cols_to_keep = []
         for col in leave_results.columns:
             if str(col).startswith("Day_"):
                 try:
                     day_num = int(str(col).split("_")[1])
                     if day_num <= 31:
-                        # Panatilihin lang ang column kung hindi puro blank ang laman nito
                         if not leave_results[col].astype(str).str.strip().eq("").all():
                             cols_to_keep.append(col)
                 except ValueError:
