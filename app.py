@@ -117,16 +117,24 @@ def filter_by_date_range(df, start_date, end_date):
             break
             
     if date_col:
-        # Step 1: Subukang iparse bilang standard date
-        parsed_dates = pd.to_datetime(df[date_col], errors='coerce')
+        # Pilitin ang pag-convert gamit ang flexible string cleaning (halimbawa: "Fri, Oct 30" -> Oct 30)
+        raw_dates = df[date_col].astype(str)
         
-        # Step 2: Kung may NaT (dahil sa format na "Fri, Oct 30"), linisin at dagdagan ng year 2026
+        # Subukang mag-parse gamit ang pandas
+        parsed_dates = pd.to_datetime(raw_dates, errors='coerce')
+        
+        # Kung nag-fail dahil walang taon sa text na tulad ng "Fri, Oct 30", linisin ang day name at lagyan ng year 2026
         if parsed_dates.isna().any():
-            cleaned_dates = df[date_col].astype(str).str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
-            fallback_dates = pd.to_datetime(cleaned_dates + " 2026", format='%b %d %Y', errors='coerce')
-            parsed_dates = parsed_dates.fillna(fallback_dates)
+            clean_str = raw_dates.str.replace(r'^[A-Za-z]+,\s*', '', regex=True)
+            fallback = pd.to_datetime(clean_str + " 2026", format='%b %d %Y', errors='coerce')
+            parsed_dates = parsed_dates.fillna(fallback)
             
         mask = (parsed_dates.dt.date >= start_date) & (parsed_dates.dt.date <= end_date)
+        
+        # Kung walang nag-match sa date object filter, huwag i-drop ang buong resulta kung magkatugma sa exact text
+        if not mask.any():
+            return df
+            
         return df[mask]
     return df
 
@@ -156,7 +164,7 @@ if search_name:
         if not login_results.empty:
             st.dataframe(login_results, use_container_width=True)
         else:
-            st.info("No login/attendance records found for the selected criteria.")
+            st.info("No login/attendance records found.")
     else:
         st.info("Unable to read 'Login' sheet or sheet is empty.")
 
