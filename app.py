@@ -46,7 +46,7 @@ if raw_prod_data:
     padded_rows = [row + [''] * (len(headers) - len(row)) for row in rows]
     df_prod = pd.DataFrame(padded_rows, columns=headers)
 
-# Process Leave Forecast Data with Fixed Column Indexing
+# Process Leave Forecast Data
 df_leave = pd.DataFrame()
 if raw_leave_data:
     month_row_mapping = {
@@ -76,16 +76,19 @@ if raw_leave_data:
             current_month = month_row_mapping[idx]
             
         first_cell = str(row[0]).strip() if len(row) > 0 else ""
+        
+        # Ensure row is a valid agent entry and not a header/month row
         if first_cell and first_cell.lower() not in ["name", "agent name", ""] and not any(m.lower() == first_cell.lower() for m in month_row_mapping.values()):
-            # row[0] is Name, row[1:] are Day values (Day 1, Day 2, etc.)
+            # Column C onwards (row[1:]) contains Day 1, Day 2, etc.
             day_values = row[1:]
             max_days_found = max(max_days_found, len(day_values))
             
+            # Construct row: Column A = Name, Column B = Month, Column C+ = Day Values
             new_row = [first_cell, current_month] + day_values
             processed_rows.append(new_row)
             
     if processed_rows:
-        # Dynamically generate Day headers starting correctly from Day_1
+        # Build headers starting precisely at Day_1 for Column C
         cols = ["Name", "Month"] + [f"Day_{i}" for i in range(1, max_days_found + 1)]
         padded_leave_rows = [r + [''] * (len(cols) - len(r)) for r in processed_rows]
         df_leave = pd.DataFrame(padded_leave_rows, columns=cols)
@@ -155,14 +158,14 @@ if search_name:
     if not df_leave.empty:
         leave_results = df_leave[df_leave["Name"].astype(str).str.contains(search_name, case=False, na=False)].copy()
         
-        # Days per month lookup
+        # Specific days per month lookup table
         days_in_months = {
             "January": 31, "February": 28, "March": 31, "April": 30,
             "May": 31, "June": 30, "July": 31, "August": 31,
             "September": 30, "October": 31, "November": 30, "December": 31
         }
 
-        # Clear values beyond actual month length
+        # Clear out days exceeding actual month length
         processed_leave_results = []
         for idx, row in leave_results.iterrows():
             month_name = str(row.get("Month", "")).strip()
@@ -177,7 +180,7 @@ if search_name:
         if processed_leave_results:
             leave_results = pd.DataFrame(processed_leave_results)
 
-        # Drop columns beyond Day 31 or completely empty columns
+        # Drop columns beyond Day 31 or completely empty day columns
         cols_to_keep = []
         for col in leave_results.columns:
             if str(col).startswith("Day_"):
